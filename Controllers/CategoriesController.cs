@@ -28,7 +28,7 @@ namespace OrderManagementApp.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Category>>> GetCategories()
         {
-            var cacheKey = "GET_ALL_CATEGORIES";
+            var cacheKey = "all_categories";
             List<Category> categories;
             var cachedData = await _cache.GetStringAsync(cacheKey);
             if (cachedData != null)
@@ -53,21 +53,43 @@ namespace OrderManagementApp.Controllers
                 }
             }
             return Ok(categories);
-
         }
 
         // GET: api/Categories/5
         [HttpGet("{id}")]
         public async Task<ActionResult<Category>> GetCategory(int id)
         {
-            var category = await _context.Categories.FindAsync(id);
-
-            if (category == null)
+            var cacheKey = $"category_{id}";
+            Category? category;
+            
+            var cachedData = await _cache.GetStringAsync(cacheKey);
+            if (cachedData != null)
             {
-                return NotFound();
+                // Deserialize cached data
+                category = JsonSerializer.Deserialize<Category>(cachedData) ?? new Category();
             }
+            else
+            {
+                // Fetch data from database
+                category = await _context.Categories.FindAsync(id);
 
-            return category;
+                if (category == null)
+                {
+                    return NotFound();
+                }
+
+                if (category != null)
+                {
+                    // Serialize data and cache it
+                    var serializedData = JsonSerializer.Serialize(category);
+
+                    var cacheOptions = new DistributedCacheEntryOptions()
+                        .SetAbsoluteExpiration(TimeSpan.FromMinutes(5));
+
+                    await _cache.SetStringAsync(cacheKey, serializedData, cacheOptions);
+                }
+            }
+            return Ok(category);
         }
 
         // PUT: api/Categories/5
